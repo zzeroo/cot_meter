@@ -9,13 +9,31 @@ use cot::project::{MiddlewareContext, RegisterAppsContext, RootHandlerBuilder};
 use cot::router::{Route, Router};
 use cot::static_files::{StaticFile, StaticFilesMiddleware};
 use cot::{App, AppBuilder, BoxedHandler, Project, static_files};
+use cot::db::{model, Auto, LimitedString};
 
-#[derive(Debug, Template)]
+//#[model]
+pub struct MeterType<'a> {
+    //#[model(primary_key)]
+    //id: Auto<i64>,
+    //#[model(unique)]
+    //name: LimitedString<32>,
+    name: &'a str,
+}
+
+#[derive(Template)]
 #[template(path = "index.html")]
-struct IndexTemplate {}
+struct IndexTemplate<'a> {
+    meter_types: Vec<MeterType<'a>>,
+}
 
 async fn index() -> cot::Result<Html> {
-    let index_template = IndexTemplate {};
+    let meter_types = vec![
+        MeterType { name: "gas meter" },
+        MeterType { name: "water meter" },
+        MeterType { name: "electricity meter" },
+    ];
+
+    let index_template = IndexTemplate { meter_types };
     let rendered = index_template.render()?;
 
     Ok(Html::new(rendered))
