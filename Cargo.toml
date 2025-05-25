@@ -1,0 +1,8 @@
+[package]
+name = "cot_meter"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+askama = "0.14"
+cot = { version = "0.3.0", features = ["full"] }
