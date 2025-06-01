@@ -1,8 +1,13 @@
 mod migrations;
 
 use askama::Template;
+use async_trait::async_trait;
 use cot::{reverse_redirect, App, AppBuilder, BoxedHandler, Project};
+use cot::admin::{AdminApp, DefaultAdminModelManager};
+use cot::admin::AdminModel;
+use cot::auth::db::{DatabaseUser, DatabaseUserApp};
 use cot::cli::CliMetadata;
+use cot::common_types::Password;
 use cot::db::{Auto, Model, model};
 use cot::db::migrations::SyncDynMigration;
 use cot::db::query;
@@ -10,16 +15,16 @@ use cot::form::Form;
 use cot::html::Html;
 use cot::middleware::{AuthMiddleware, SessionMiddleware, LiveReloadMiddleware};
 use cot::project::{MiddlewareContext, RegisterAppsContext};
-use cot::request::extractors::Path;
-use cot::request::extractors::RequestDb;
-use cot::request::extractors::RequestForm;
+use cot::ProjectContext;
+use cot::request::extractors::{Path, RequestDb, RequestForm};
 use cot::response::Response;
 use cot::router::{Route, Router, Urls};
 use cot::static_files;
-use cot::static_files::StaticFile;
-use cot::static_files::StaticFilesMiddleware;
+use cot::static_files::{StaticFile, StaticFilesMiddleware};
+use std::env;
+use std::fmt::Display;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Form, AdminModel)]
 #[model]
 pub struct MeterType {
     #[model(primary_key)]
@@ -27,6 +32,12 @@ pub struct MeterType {
     //#[model(unique)]
     //name: LimitedString<32>,
     name: String,
+}
+
+impl Display for MeterType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)
+    }
 }
 
 #[derive(Debug, Template)]
@@ -73,9 +84,27 @@ async fn remove_meter_type(urls: Urls, RequestDb(db): RequestDb, Path(meter_type
 struct CotMeterApp;
 
 // An app is a collection of views and other components that make up a part of your service.
+#[async_trait]
 impl App for CotMeterApp {
     fn name(&self) -> &'static str {
         env!("CARGO_CRATE_NAME")
+    }
+
+    fn admin_model_managers(&self) -> Vec<Box<dyn cot::admin::AdminModelManager>> {
+        vec![Box::new(DefaultAdminModelManager::<MeterType>::new())]
+    }
+
+    async fn init(&self, context: &mut ProjectContext) -> cot::Result<()> {
+        // Check if admin user exists
+        let admin_user_name = env::var("ADMIN_USER").unwrap_or_else(|_| "admin".to_string());
+        let user = DatabaseUser::get_by_username(context.database(), "admin").await?;
+        if user.is_none() {
+            let password = env::var("ADMIN_PASSWORD").unwrap_or_else(|_| "change me".to_string());
+            // Create admin user
+            DatabaseUser::create_user(context.database(), &admin_user_name, &Password::new(&password)).await?;
+        }
+
+        Ok(())
     }
 
     fn migrations(&self) -> Vec<Box<SyncDynMigration>> {
@@ -104,6 +133,8 @@ impl Project for CotMeterProject {
     }
 
     fn register_apps(&self, apps: &mut AppBuilder, _context: &RegisterAppsContext) {
+        apps.register(DatabaseUserApp::new()); // Needed for admin authentication
+        apps.register_with_views(AdminApp::new(), "/admin"); // Register the admin app
         apps.register_with_views(CotMeterApp, "");
     }
 
@@ -114,6 +145,7 @@ impl Project for CotMeterProject {
     ) -> BoxedHandler {
         handler
             .middleware(StaticFilesMiddleware::from_context(context))
+            .middleware(SessionMiddleware::new()) // Required for admin login
             .middleware(AuthMiddleware::new())
             .middleware(SessionMiddleware::new())
             .middleware(LiveReloadMiddleware::from_context(context))
