@@ -1,10 +1,27 @@
 {% extends "base.html" %}
 
 {% block content %}
+
+{% let urls = urls %}
+
 <h1>Meter Types</h1>
-<ul>
+<form id="meter-type-form" action="{{ cot::reverse!(urls, "add-meter-type")? }}" method="post">
+    <input type="text" id="name" name="name" placeholder="Enter a new meter-type" required>
+    <button type="submit">Add Meter Type</button>
+</form>
+
+<ul id="meter_types-list">
     {% for meter_type in meter_types %}
-    <li>{{ loop.index }}. {{ meter_type.name }}</li>
+    <li>
+        {% let meter_type_id = meter_type.id %}
+        <form action="{{ cot::reverse!(urls, "remove-meter-type", meter_type_id = meter_type_id)? }}" method="post">
+            <span>
+                {{ loop.index }}. {{ meter_type.name }}
+            </span>
+            <button type="submit">Remove</button>
+        </form>
+    </li>
     {% endfor %}
 </ul>
 {% endblock %}
+
