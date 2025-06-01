@@ -5,4 +5,5 @@ edition = "2021"
 
 [dependencies]
 askama = "0.14"
+async-trait = "0.1.88"
 cot = { version = "0.3.0", features = ["full"] }
